@@ -1,0 +1,123 @@
+#Reload IPYNB if you make changes to any of the Python files
+
+%matplotlib inline
+
+"""
+Simulate Franka Panda Arm
+"""
+
+import numpy as np
+from math import sin, cos, pi
+from scipy.integrate import solve_ivp
+import matplotlib.pyplot as plt
+import importlib
+import copy
+from loadmap import loadmap
+from arm_sim import simulate_arm
+import robotic_arm
+importlib.reload(robotic_arm)
+from robotic_arm import Robot
+import pickle
+import random
+
+# Weights of LQR cost
+weight_R = 1
+weight_Q = 10
+R = weight_R*np.eye(6)
+Q = weight_Q*np.eye(18)
+for i in [1,2,4,5,7,8,10,11,13,14,16,17]:
+    Q[i,i] = 0
+Q = np.eye(18)
+Qf = Q
+
+# End time of the simulation
+tf = 16
+
+# Construct our quadrotor controller 
+robotic_arm = Robot(Q, R, Qf)
+x0              = np.zeros(18)
+x_final         = np.zeros(18)
+#####################################################################
+######### ADD any random seed below to test MPC ####################
+#####################################################################
+random_seed1    = [0, -0.78, 0, -2.36, 0, 1.57]
+random_seed2    = [0, -0.78+0.6, 0, -2.36+0.6, 0, 1.57+np.pi/2]
+
+x0[0]           = random_seed1[0]
+x0[3]           = random_seed1[1]
+x0[6]           = random_seed1[2]
+x0[9]           = random_seed1[3]
+x0[12]          = random_seed1[4]
+x0[15]          = random_seed1[5]
+       
+
+x_final[0]      = random_seed2[0]
+x_final[3]      = random_seed2[1]
+x_final[6]      = random_seed2[2]
+x_final[9]      = random_seed2[3]
+x_final[12]     = random_seed2[4]
+x_final[15]     = random_seed2[5]
+
+
+
+x, u, t, loss, optimal_cost = simulate_arm(x0, x_final, tf, robotic_arm)
+
+passed_counter  = 0
+passedlist      = []
+failedlist      = []
+initial_error   = []
+final_error     = []
+
+for i in range(100):
+    print("Iteration no.: ", i)
+    pass_state_dict = {}
+    fail_state_dict = {}
+    x0      = np.zeros(18)
+    x_final = np.zeros(18)
+    
+    lowerLim = np.array([-2.8973, -1.7628, -2.8973, -3.0718, -2.8973, -0.0175, -2.8973])    # Lower joint limits in radians ** This does not include gripper
+    upperLim = np.array([ 2.8973,  1.7628,  2.8973, -0.0698,  2.8973,  3.7525,  2.8973])    # Upper joint limits in radians (grip in mm)
+    
+    random_seed1 = random.uniform(lowerLim, upperLim)
+    random_seed2 = random.uniform(lowerLim, upperLim)
+
+    x0[0]   = random_seed1[0]
+    x0[3]   = random_seed1[1]
+    x0[6]   = random_seed1[2]
+    x0[9]   = random_seed1[3]
+    x0[12]  = random_seed1[4]
+    x0[15]  = random_seed1[5]
+
+
+    x_final[0]  = random_seed2[0]
+    x_final[3]  = random_seed2[1]
+    x_final[6]  = random_seed2[2]
+    x_final[9]  = random_seed2[3]
+    x_final[12] = random_seed2[4]
+    x_final[15] = random_seed2[5]
+
+
+    x, u, t, error_list, optimal_cost = simulate_arm(x0, x_final, tf, robotic_arm)
+
+    print("Starting error: ",     error_list[0])
+    print("Iteration end error: ",error_list[-1])
+    
+    initial_error   .append(np.array(error_list)[0])
+    final_error     .append(np.array(error_list)[-1])
+    
+    if(np.array(error_list)[-1]<0.1):
+        passed_counter+=1
+        print("Passed")
+        pass_state_dict["x0"] = x0
+        pass_state_dict["x_final"] = x_final
+        pass_state_dict["time_taken"] = t[-1]
+        passedlist.append(pass_state_dict)
+    
+    else:
+        print("Failed")
+        fail_state_dict["x0"] = x0
+        fail_state_dict["x_final"] = x_final
+        fail_state_dict["time_taken"] = t[-1]
+        failedlist.append(fail_state_dict)
+    print(" ")
+        
